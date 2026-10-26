@@ -11,36 +11,57 @@ jobs:
   build-debug-apk:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code
+      - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Auto-Unzip source.zip in Cloud
+      - name: 2. Auto-Unzip source.zip
         run: |
           if [ -f "source.zip" ]; then
             unzip -o source.zip
+            rm -f source.zip
           else
             ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
             if [ -n "$ZIP_FILE" ]; then
               unzip -o "$ZIP_FILE"
+              rm -f "$ZIP_FILE"
             fi
           fi
 
-      - name: Set up JDK 17
+      - name: 3. Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle Wrapper & Cache
+      - name: 4. Setup Gradle Wrapper & Cache
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: 5. Build Debug APK
+        run: |
+          # 自动寻找项目根目录（包含 gradlew 或 settings.gradle 的文件夹）
+          if [ -f "gradlew" ]; then
+            echo "项目在当前根目录，直接编译..."
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            # 如果解压后套了文件夹，自动找进去
+            PROJECT_DIR=$(find . -maxdepth 3 -name "gradlew" -type f | head -n 1 | xargs dirname)
+            if [ -n "$PROJECT_DIR" ]; then
+              echo "检测到项目目录在: $PROJECT_DIR"
+              cd "$PROJECT_DIR"
+              chmod +x gradlew
+              ./gradlew assembleDebug --stacktrace
+            else
+              echo "未找到 gradlew，尝试使用全局 gradle 构建..."
+              gradle assembleDebug --stacktrace
+            fi
+          fi
 
-      - name: Upload Compiled APK Artifact
+      - name: 6. Upload Compiled APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ColorOS17-AINotes-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          # 使用 ** 递归查找所有生成 apk 的路径
+          path: "**/build/outputs/apk/debug/*.apk"
