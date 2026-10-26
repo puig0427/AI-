@@ -40,22 +40,27 @@ jobs:
 
       - name: 5. Build Debug APK
         run: |
-          # 自动寻找项目根目录（包含 gradlew 或 settings.gradle 的文件夹）
+          # 1. 优先检查根目录有没有 gradlew
           if [ -f "gradlew" ]; then
-            echo "项目在当前根目录，直接编译..."
+            echo "✅ 根目录找到 gradlew，直接开始编译..."
             chmod +x gradlew
             ./gradlew assembleDebug --stacktrace
           else
-            # 如果解压后套了文件夹，自动找进去
-            PROJECT_DIR=$(find . -maxdepth 3 -name "gradlew" -type f | head -n 1 | xargs dirname)
-            if [ -n "$PROJECT_DIR" ]; then
-              echo "检测到项目目录在: $PROJECT_DIR"
+            # 2. 如果没有，寻找包含 settings.gradle 的目录作为项目根目录
+            SETTINGS_FILE=$(find . -maxdepth 5 \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+            
+            if [ -n "$SETTINGS_FILE" ]; then
+              PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+              echo "✅ 检测到 Gradle 项目目录在: $PROJECT_DIR"
               cd "$PROJECT_DIR"
               chmod +x gradlew
               ./gradlew assembleDebug --stacktrace
             else
-              echo "未找到 gradlew，尝试使用全局 gradle 构建..."
-              gradle assembleDebug --stacktrace
+              echo "❌ 错误：没有找到 gradlew 或 settings.gradle 文件！"
+              echo "⚠️ 这说明你的压缩包解压后不是一个完整的原生 Android 项目。"
+              echo "📁 当前解压后的根目录文件如下，请检查你的 AI 是否完整生成了工程："
+              ls -la
+              exit 1
             fi
           fi
 
