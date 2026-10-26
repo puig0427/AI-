@@ -33,40 +33,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 4. Setup Gradle Wrapper & Cache
+      - name: 4. Setup Global Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
       - name: 5. Build Debug APK
         run: |
-          # 1. 优先检查根目录有没有 gradlew
-          if [ -f "gradlew" ]; then
-            echo "✅ 根目录找到 gradlew，直接开始编译..."
-            chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            # 2. 如果没有，寻找包含 settings.gradle 的目录作为项目根目录
-            SETTINGS_FILE=$(find . -maxdepth 5 \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          # 寻找 settings.gradle 所在的目录
+          SETTINGS_FILE=$(find . -maxdepth 5 \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          
+          if [ -n "$SETTINGS_FILE" ]; then
+            PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+            echo "✅ 检测到项目目录在: $PROJECT_DIR"
+            cd "$PROJECT_DIR"
             
-            if [ -n "$SETTINGS_FILE" ]; then
-              PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-              echo "✅ 检测到 Gradle 项目目录在: $PROJECT_DIR"
-              cd "$PROJECT_DIR"
+            # 判断是否存在 gradlew
+            if [ -f "gradlew" ]; then
+              echo "✅ 找到 gradlew，使用 wrapper 编译..."
               chmod +x gradlew
               ./gradlew assembleDebug --stacktrace
             else
-              echo "❌ 错误：没有找到 gradlew 或 settings.gradle 文件！"
-              echo "⚠️ 这说明你的压缩包解压后不是一个完整的原生 Android 项目。"
-              echo "📁 当前解压后的根目录文件如下，请检查你的 AI 是否完整生成了工程："
-              ls -la
-              exit 1
+              echo "⚠️ 未找到 gradlew，尝试使用全局 Gradle 编译..."
+              # 直接把全局 gradle 当作 wrapper 来用
+              gradle wrapper --gradle-version 8.10.2
+              chmod +x gradlew
+              ./gradlew assembleDebug --stacktrace
             fi
+          else
+            echo "❌ 错误：没有找到 settings.gradle 或 settings.gradle.kts 文件！"
+            ls -la
+            exit 1
           fi
 
       - name: 6. Upload Compiled APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ColorOS17-AINotes-Debug-APK
-          # 使用 ** 递归查找所有生成 apk 的路径
           path: "**/build/outputs/apk/debug/*.apk"
